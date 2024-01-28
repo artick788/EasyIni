@@ -59,6 +59,22 @@ int main(int argc, char** argv){
         vectorPrint(StringVector);
         vectorPrint(FloatVector);
 
+        auto Int2 = config2["NOT_EXIST"]["Width"].getOrDefault<int>(800);
+        auto String2 = config2["NOT_EXIST"]["Name"].getOrDefault<std::string>("Default");
+        auto Float2 = config2["NOT_EXIST"]["Height"].getOrDefault<float>(600.0f);
+        std::cout << "Int2: " << Int2 << std::endl;
+        std::cout << "String2: " << String2 << std::endl;
+        std::cout << "Float2: " << Float2 << std::endl;
+
+        auto IntVector2 = config2["NOT_EXIST"]["IntVector"].getVectorOrDefault<int>({5, 7, 8, 23});
+        auto StringVector2 = config2["NOT_EXIST"]["StringVector"].getVectorOrDefault<std::string>({"Life", "Is", "Good"});
+        auto FloatVector2 = config2["NOT_EXIST"]["FloatVector"].getVectorOrDefault<float>({1.1f, 2.2f, 3.3f, 4.4f, 5.5f});
+        vectorPrint(IntVector2);
+        vectorPrint(StringVector2);
+        vectorPrint(FloatVector2);
+
+        config2.save();
+
 
 
 

@@ -85,8 +85,9 @@ namespace EasyIni{
         }
 
         template<typename T>
-        inline T getOrDefault(T& def){
+        inline T getOrDefault(T def){
             if (m_Value.empty()){
+                this->operator=(def);
                 return def;
             }
             return get<T>();
@@ -112,8 +113,9 @@ namespace EasyIni{
         }
 
         template<typename T>
-        std::vector<T> getVectorOrDefault(std::vector<T>& def){
+        std::vector<T> getVectorOrDefault(std::vector<T> def){
             if (m_Value.empty()){
+                this->operator=(def);
                 return def;
             }
             return getVector<T>();
