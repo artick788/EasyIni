@@ -1,275 +1,281 @@
 #pragma once
 
 #include <string>
-#include <iostream>
-#include <exception>
-#include <fstream>
 #include <vector>
-#include <algorithm>
+#include <fstream>
 #include <sstream>
-#include <memory>
+#include <unordered_map>
+#include <algorithm>
+#include <filesystem>
+#include <iostream>
 
 
 namespace EasyIni{
 
+    template <typename T>
+    struct IsCharArray : std::false_type {};
+
+    template <typename CharT, std::size_t Size>
+    struct IsCharArray<CharT[Size]> : std::true_type {};
+
+    template <typename T>
+    constexpr bool is_char_array = IsCharArray<T>::value;
+
     class Element{
     public:
-        Element(const std::string& name, const std::string& value)
-                : m_Name(name),
-                  m_Value(value){
+        Element() = delete;
 
+        explicit Element(const std::string& key, const std::string& value):
+        m_Key(key),
+        m_Value(value){
         }
 
-        ~Element(){
+        ~Element() = default;
 
-        }
-
-        void save(std::ofstream& file){
-            file << m_Name << " = " << m_Value << "\n";
-        }
-
-        [[nodiscard]] const std::string& getName() const{
-            return m_Name;
-        }
-
-        [[nodiscard]] const std::string& getValue() const{
-            return m_Value;
-        }
-
-        void setValue(const std::string& value){
-            m_Value = value;
+        void save(std::ofstream& file) const {
+            // no need to add spaces around the '=' character since we didn't remove them
+            file << m_Key << "=" << m_Value << std::endl;
         }
 
         template<typename T>
         void operator=(const T& value){
-            m_Value = std::to_string(value);
-        }
-
-        void operator=(const std::string& value){
-            m_Value = value;
+            std::stringstream ss;
+            if constexpr (std::is_same_v<T, std::string> or
+                          is_char_array<T> or
+                          std::is_same_v<T, const char*> or
+                          std::is_same_v<T, char*> or
+                          std::is_same_v<T, const char (&)[]> or
+                          std::is_same_v<T, char (&)[]>){
+                ss << std::quoted(value);
+            } else {
+                ss << value;
+            }
+            m_Value = ss.str();
         }
 
         template<typename T>
         void operator=(const std::vector<T>& value){
-            m_Value = "(";
-            for (uint32_t i = 0; i < value.size(); i++) {
-                m_Value += std::to_string(value[i]);
-                if (i < value.size() - 1) {
-                    m_Value += ", ";
+            std::stringstream ss;
+            ss << "(";
+            for (size_t i = 0; i < value.size(); ++i){
+                if constexpr (std::is_same_v<T, std::string> or
+                              is_char_array<T> or
+                              std::is_same_v<T, const char*> or
+                              std::is_same_v<T, char*> or
+                              std::is_same_v<T, const char (&)[]> or
+                              std::is_same_v<T, char (&)[]>){
+                    ss << std::quoted(value[i]);
+                } else {
+                    ss << value[i];
+                }
+                if (i != value.size() - 1){
+                    ss << ",";
                 }
             }
-            m_Value += ")";
-        }
-
-        void operator=(const std::vector<std::string>& value){
-            m_Value = "(";
-            for (uint32_t i = 0; i < value.size(); i++) {
-                m_Value += value[i];
-                if (i < value.size() - 1) {
-                    m_Value += ", ";
-                }
-            }
-            m_Value += ")";
+            ss << ")";
+            m_Value = ss.str();
         }
 
         template<typename T>
-        [[nodiscard]] T get() const{
+        inline T get(){
             std::stringstream ss(m_Value);
-            T retVal;
-            ss >> retVal;
-            return retVal;
-        }
-
-        [[nodiscard]] std::string get() const{
-            return m_Value;
+            T t;
+            ss >> t;
+            return t;
         }
 
         template<typename T>
-        [[nodiscard]] T getOrDefault(const T& def){
-            if (m_Value.empty()) {
-                m_Value = std::to_string(def);
-                return def;
-            }
-            else{
-                return get<T>();
-            }
-        }
-
-        [[nodiscard]] std::string getOrDefault(const std::string& def){
-            if (m_Value.empty()) {
-                m_Value = def;
-            }
-            return m_Value;
-        }
-
-        template<typename T>
-        [[nodiscard]] std::vector<T> getVector() const{
-            std::vector<T> retVal;
-            auto toErase = m_Value;
-            toErase.erase(std::remove(toErase.begin(), toErase.end(), '('), toErase.end());
-            toErase.erase(std::remove(toErase.begin(), toErase.end(), ')'), toErase.end());
-            std::stringstream ll(toErase);
-            while (ll.good()){
-                std::string substr;
-                getline(ll, substr, ',');
-                T val;
-                std::stringstream ss(substr);
-                ss >> val;
-                retVal.push_back(val);
-            }
-            return retVal;
-        }
-
-        template<typename T>
-        [[nodiscard]] std::vector<T> getVectorOrDefault(const std::vector<T>& def){
+        inline T getOrDefault(T& def){
             if (m_Value.empty()){
-                m_Value = "(";
-                for (uint32_t i = 0; i < def.size(); i++) {
-                    m_Value += std::to_string(def[i]);
-                    if (i < def.size() - 1) {
-                        m_Value += ", ";
-                    }
-                }
-                m_Value += ")";
                 return def;
             }
-            else{
-                return getVector<T>();
+            return get<T>();
+        }
+
+        template<typename T>
+        std::vector<T> getVector(){
+            auto cVal = m_Value;
+            cVal.erase(std::remove(cVal.begin(), cVal.end(), ' '), cVal.end());
+            cVal.erase(std::remove(cVal.begin(), cVal.end(), '\t'), cVal.end());
+            cVal.erase(std::remove(cVal.begin(), cVal.end(), '('), cVal.end());
+            cVal.erase(std::remove(cVal.begin(), cVal.end(), ')'), cVal.end());
+            std::vector<T> result;
+            std::stringstream ss(cVal);
+            std::string item;
+            while (std::getline(ss, item, ',')){
+                std::stringstream ssItem(item);
+                T t;
+                ssItem >> t;
+                result.emplace_back(t);
             }
+            return result;
+        }
+
+        template<typename T>
+        std::vector<T> getVectorOrDefault(std::vector<T>& def){
+            if (m_Value.empty()){
+                return def;
+            }
+            return getVector<T>();
         }
 
     private:
-        std::string m_Name;
+        std::string m_Key;
         std::string m_Value;
+
     };
+
+    template<>
+    inline std::string Element::get<std::string>(){
+        std::string result;
+        std::stringstream ss(m_Value);
+        ss >> std::quoted(result);
+        return result;
+    }
+
+    template<>
+    std::vector<std::string> Element::getVector<std::string>(){
+        auto cVal = m_Value;
+        cVal.erase(std::remove(cVal.begin(), cVal.end(), '('), cVal.end());
+        cVal.erase(std::remove(cVal.begin(), cVal.end(), ')'), cVal.end());
+        std::vector<std::string> result;
+        std::stringstream ss(cVal);
+        std::string item;
+        while (std::getline(ss, item, ',')){
+            std::stringstream ssItem(item);
+            std::string t;
+            ssItem >> std::quoted(t);
+            result.emplace_back(t);
+        }
+        return result;
+    }
 
     class Section{
     public:
+        Section() = delete;
 
-        explicit Section(const std::string& name)
-                : m_Name(name){
-
-        }
-
-        ~Section(){
+        explicit Section(const std::string& name):
+        m_Name(name){
 
         }
 
-        void save(std::ofstream& file){
-            file << "[" << m_Name << "]\n";
-            for(auto& element : m_Elements){
+        void addElement(const std::string& key, const std::string& value){
+            m_Elements.emplace(key, Element(key, value));
+        }
+
+        Element& operator[](const std::string& key){
+            if (m_Elements.find(key) == m_Elements.end()){
+                m_Elements.emplace(key, Element(key, ""));
+            }
+            return m_Elements.at(key);
+        }
+
+        void save(std::ofstream& file) const {
+            for (const auto& [key, element] : m_Elements){
                 element.save(file);
             }
-            file << "\n";
-        }
-
-        [[nodiscard]] const std::string& getName() const{
-            return m_Name;
-        }
-
-        void addElement(const std::string& name, const std::string& value){
-            m_Elements.emplace_back(name, value);
-        }
-
-        Element& getElement(const std::string& name){
-            uint64_t index = m_Elements.size();
-            for (uint64_t i = 0; i < m_Elements.size(); i++){
-                if (m_Elements[i].getName() == name){
-                    index = i;
-                    break;
-                }
-            }
-            if (index == m_Elements.size()){
-                m_Elements.emplace_back(name, "");
-            }
-            return m_Elements[index];
-        }
-
-        Element& operator[](const std::string& name){
-            return getElement(name);
         }
 
     private:
-        std::vector<Element> m_Elements;
         std::string m_Name;
+        std::unordered_map<std::string, Element> m_Elements;
 
     };
 
     class Configuration{
     public:
-        explicit Configuration(const std::string& fileName)
-                : m_FileName(fileName){
-            std::ifstream file(fileName);
-            if(file.is_open()){
-                Section section("NULL");
-                std::string line;
-                while (std::getline(file, line)){
-                    auto assignPos = line.find('=');
-                    auto bracketOPos = line.find('[');
-                    auto bracketCPos = line.find(']');
-                    if (bracketOPos != std::string::npos and bracketCPos != std::string::npos){
-                        std::string nodeName = line.substr(bracketOPos + 1, bracketCPos - 1);
-                        if (section.getName() != "NULL"){
-                            m_Sections.push_back(section);
-                        }
-                        section = Section(nodeName);
+        Configuration() = delete;
 
-                    }
-                    else if (assignPos != std::string::npos){
-                        line.erase(std::remove(line.begin(), line.end(), ' '), line.end());
-                        line.erase(std::remove(line.begin(), line.end(), '\n'), line.end());
-                        std::string key = line.substr(0, assignPos - 1);
-                        std::string entry = line.substr(assignPos, std::string::npos);
-                        section.addElement(key, entry);
-                    }
+        explicit Configuration(const std::string& iniFile):
+        m_IniFile(iniFile){
+            if (!std::filesystem::exists(iniFile)){
+                throw std::runtime_error("File does not exist");
+            }
+            std::ifstream file(iniFile);
+            if (!file.is_open()){
+                throw std::runtime_error("Could not open file");
+            }
+            std::string line;
+            Section* currentSection = nullptr;
+            while (std::getline(file, line)){
+                if (line.empty()){
+                    continue;
                 }
-                if (section.getName() != "NULL"){
-                    m_Sections.push_back(section);
+                if (line[0] == ';' or line[0] == '#'){
+                    continue;
+                }
+                auto cBracketOpen = line.find('[');
+                auto cBracketClose = line.find(']');
+                if (cBracketOpen != std::string::npos and cBracketClose != std::string::npos){
+                    auto sectionName = line.substr(cBracketOpen + 1, cBracketClose - cBracketOpen - 1);
+                    m_Sections.emplace(sectionName, Section(sectionName));
+                    currentSection = &m_Sections.at(sectionName);
+                    continue;
+                }
+                auto assignPos = line.find('=');
+                if (assignPos != std::string::npos){
+                    auto key = line.substr(0, assignPos);
+                    key.erase(std::remove(key.begin(), key.end(), ' '), key.end());
+                    key.erase(std::remove(key.begin(), key.end(), '\t'), key.end());
+                    key.erase(std::remove(key.begin(), key.end(), '\r'), key.end());
+                    key.erase(std::remove(key.begin(), key.end(), '\n'), key.end());
+                    auto value = line.substr(assignPos + 1);
+                    if (currentSection != nullptr){
+                        currentSection->addElement(key, value);
+                    }
                 }
             }
         }
 
-        ~Configuration(){
-
-        }
+        ~Configuration() = default;
 
         void save(){
-            save(m_FileName);
-        }
-
-        void save(const std::string& fileName){
-            std::ofstream file(fileName);
-            for (auto& section : m_Sections){
+            std::ofstream file(m_IniFile);
+            if (!file.is_open()){
+                throw std::runtime_error("Could not open file");
+            }
+            for (const auto& [sectionName, section] : m_Sections){
+                file << "[" << sectionName<< "]" << std::endl;
                 section.save(file);
+                file << std::endl;
             }
-            file.close();
         }
 
-        void addSection(const std::string& name){
-            m_Sections.emplace_back(name);
+        void save(const std::string& iniFile){
+            m_IniFile = iniFile;
+            save();
         }
 
-        Section& getSection(const std::string& name){
-            uint64_t index = m_Sections.size();
-            for (uint64_t i = 0; i < m_Sections.size(); i++){
-                if (m_Sections[i].getName() == name){
-                    index = i;
-                    break;
-                }
+        Section& operator[](const std::string& sectionName){
+            if (m_Sections.find(sectionName) == m_Sections.end()){
+                m_Sections.emplace(sectionName, Section(sectionName));
             }
-            if (index == m_Sections.size()){
-                m_Sections.emplace_back(name);
-            }
-            return m_Sections[index];
+            return m_Sections.at(sectionName);
         }
 
-        Section& operator[](const std::string& name){
-            return getSection(name);
+        Section& getSection(const std::string& sectionName){
+            if (m_Sections.find(sectionName) == m_Sections.end()){
+                throw std::runtime_error("Section: " + sectionName + " does not exist");
+            }
+            return m_Sections.at(sectionName);
+        }
+
+        const Section& getSection(const std::string& sectionName) const{
+            if (m_Sections.find(sectionName) == m_Sections.end()){
+                throw std::runtime_error("Section: " + sectionName + " does not exist");
+            }
+            return m_Sections.at(sectionName);
+        }
+
+        void addSection(const std::string& sectionName){
+            m_Sections.emplace(sectionName, Section(sectionName));
         }
 
     private:
-        std::vector<Section> m_Sections;
-        std::string m_FileName;
+        std::string m_IniFile;
+        std::unordered_map<std::string, Section> m_Sections;
 
     };
+
+
 }
