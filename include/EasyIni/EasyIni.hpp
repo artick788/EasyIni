@@ -136,7 +136,7 @@ namespace EasyIni{
     }
 
     template<>
-    std::vector<std::string> Element::getVector<std::string>(){
+    inline std::vector<std::string> Element::getVector<std::string>(){
         auto cVal = m_Value;
         cVal.erase(std::remove(cVal.begin(), cVal.end(), '('), cVal.end());
         cVal.erase(std::remove(cVal.begin(), cVal.end(), ')'), cVal.end());
@@ -191,11 +191,11 @@ namespace EasyIni{
         explicit Configuration(const std::string& iniFile):
         m_IniFile(iniFile){
             if (!std::filesystem::exists(iniFile)){
-                throw std::runtime_error("File does not exist");
+                throw std::runtime_error("File: " + iniFile + " does not exist");
             }
             std::ifstream file(iniFile);
             if (!file.is_open()){
-                throw std::runtime_error("Could not open file");
+                throw std::runtime_error("File: " + iniFile + " could not be opened");
             }
             std::string line;
             Section* currentSection = nullptr;
