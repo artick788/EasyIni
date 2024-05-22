@@ -191,7 +191,7 @@ namespace EasyIni{
         explicit Configuration(const std::string& iniFile):
         m_IniFile(iniFile){
             if (!std::filesystem::exists(iniFile)){
-                throw std::runtime_error("File: " + iniFile + " does not exist");
+                return;
             }
             std::ifstream file(iniFile);
             if (!file.is_open()){
